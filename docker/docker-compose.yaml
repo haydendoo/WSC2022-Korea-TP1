@@ -1,0 +1,50 @@
+# Local practice environment for the "server" binary ONLY.
+#
+# This is a convenience for testing the Go service on a laptop before
+# touching AWS - it is NOT a model for the competition architecture and
+# is not built by Terraform. DynamoDB Local here is a single container;
+# the actual competition calls for the real DynamoDB service, populated
+# by the Lambda + Comprehend pipeline participants build themselves.
+#
+# DynamoDB Local needs dummy (but present) AWS credentials and the
+# "unicorn" table created before the server can answer /unicorn/{id} -
+# see the one-shot "create-table" service below, which runs once and
+# exits.
+#
+# Usage: docker compose -f docker/docker-compose.yaml up --build
+
+services:
+  dynamodb-local:
+    image: amazon/dynamodb-local:latest
+    command: ["-jar", "DynamoDBLocal.jar", "-inMemory", "-sharedDb"]
+    ports:
+      - "8000:8000"
+
+  create-table:
+    image: amazon/aws-cli:latest
+    depends_on:
+      - dynamodb-local
+    environment:
+      AWS_ACCESS_KEY_ID: "local"
+      AWS_SECRET_ACCESS_KEY: "local"
+      AWS_REGION: "ap-southeast-1"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        until aws dynamodb list-tables --endpoint-url http://dynamodb-local:8000 >/dev/null 2>&1; do sleep 1; done;
+        aws dynamodb create-table --cli-input-json file:///database/table.json --endpoint-url http://dynamodb-local:8000 || true
+    volumes:
+      - ../database/table.json:/database/table.json:ro
+
+  server:
+    build:
+      context: ../services/server
+    depends_on:
+      - create-table
+    environment:
+      AWS_ACCESS_KEY_ID: "local"
+      AWS_SECRET_ACCESS_KEY: "local"
+    volumes:
+      - ../config/server.local.json:/app/config.json:ro
+    ports:
+      - "8080:80"

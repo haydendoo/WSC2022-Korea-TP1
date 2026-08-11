@@ -1,0 +1,6 @@
+{
+  "Table": "unicorn",
+  "Region": "ap-southeast-1",
+  "Port": 80,
+  "DynamoEndpoint": "http://dynamodb-local:8000"
+}
